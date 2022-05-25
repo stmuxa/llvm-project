@@ -604,6 +604,14 @@ static Value *EmitFAbs(CodeGenFunction &CGF, Value *V) {
   return Call;
 }
 
+/// EmitSin - Emit a call to @llvm.sin().
+static Value *EmitSin(CodeGenFunction &CGF, Value *V) {
+  Function *F = CGF.CGM.getIntrinsic(Intrinsic::sin, V->getType());
+  llvm::CallInst *Call = CGF.Builder.CreateCall(F, V);
+  Call->setDoesNotAccessMemory();
+  return Call;
+}
+
 /// Emit the computation of the sign bit for a floating point value. Returns
 /// the i1 sign bit value.
 static Value *EmitSignBit(CodeGenFunction &CGF, Value *V) {
@@ -2587,6 +2595,14 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
 
   switch (BuiltinIDIfNoAsmLabel) {
   default: break;
+  // Emit @llvm.sin.* intrinsic out of call to builtin
+  case Builtin::BIsin:
+  case Builtin::BIsinf:
+  case Builtin::BIsinl:
+  case Builtin::BI__builtin_sin:
+  case Builtin::BI__builtin_sinf:
+  case Builtin::BI__builtin_sinl:
+    return RValue::get(EmitSin(*this, EmitScalarExpr(E->getArg(0))));
   case Builtin::BI__builtin___CFStringMakeConstantString:
   case Builtin::BI__builtin___NSStringMakeConstantString:
     return RValue::get(ConstantEmitter(*this).emitAbstract(E, E->getType()));

@@ -585,7 +585,7 @@ X86TargetLowering::X86TargetLowering(const X86TargetMachine &TM,
       setOperationAction(ISD::FSUB, VT, Custom);
 
       // We don't support sin/cos/fmod
-      setOperationAction(ISD::FSIN   , VT, Expand);
+      setOperationAction(ISD::FSIN   , VT, Custom);
       setOperationAction(ISD::FCOS   , VT, Expand);
       setOperationAction(ISD::FSINCOS, VT, Expand);
     }
@@ -704,7 +704,7 @@ X86TargetLowering::X86TargetLowering(const X86TargetMachine &TM,
     }
 
     // Always expand sin/cos functions even though x87 has an instruction.
-    setOperationAction(ISD::FSIN   , MVT::f80, Expand);
+    setOperationAction(ISD::FSIN   , MVT::f80, Custom);
     setOperationAction(ISD::FCOS   , MVT::f80, Expand);
     setOperationAction(ISD::FSINCOS, MVT::f80, Expand);
 
@@ -31246,6 +31246,47 @@ static SDValue LowerFSINCOS(SDValue Op, const X86Subtarget &Subtarget,
   return DAG.getNode(ISD::MERGE_VALUES, dl, Tys, SinVal, CosVal);
 }
 
+// Lower @llvm.sin.(x) to (f[32|64|80])sin_integer((int)x * 1000) / 1000
+static SDValue LowerFSIN(SDValue Op, const X86Subtarget &Subtarget,
+                         SelectionDAG &DAG) {
+  SDLoc dl(Op);
+  SDValue Arg = Op.getOperand(0);
+  EVT ArgVT = Arg.getValueType();
+  EVT IntVT(MVT::SimpleValueType::i32);
+  Type *IntTy = IntVT.getTypeForEVT(*DAG.getContext());
+
+  SDValue ArgInt = DAG.getNode(ISD::FP_TO_SINT, dl, IntVT, Arg);
+  SDValue ArgTimes1000Int = DAG.getNode(ISD::MUL, dl, IntVT, ArgInt,
+                                        DAG.getConstant(1000, dl, IntVT));
+
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  SDValue Callee = DAG.getExternalSymbol("sin_integer",
+                                         TLI.getPointerTy(DAG.getDataLayout()));
+
+  TargetLowering::ArgListTy Args;
+  TargetLowering::ArgListEntry Entry;
+
+  Entry.Node = ArgTimes1000Int;
+  Entry.Ty = IntTy;
+  Entry.IsSExt = false;
+  Entry.IsZExt = false;
+  Args.push_back(Entry);
+
+  TargetLowering::CallLoweringInfo CLI(DAG);
+  CLI.setDebugLoc(dl)
+      .setChain(DAG.getEntryNode())
+      .setLibCallee(CallingConv::C, IntTy, Callee, std::move(Args));
+
+  std::pair<SDValue, SDValue> CallResult = TLI.LowerCallTo(CLI);
+
+  SDValue ResultTimes1000Int = CallResult.first;
+  SDValue ResultTimes1000 = DAG.getNode(ISD::SINT_TO_FP, dl, ArgVT, ResultTimes1000Int);
+  SDValue Result = DAG.getNode(ISD::FDIV, dl, ArgVT, ResultTimes1000,
+                               DAG.getConstantFP(1000, dl, ArgVT));
+
+  return Result;
+}
+
 /// Widen a vector input to a vector of NVT.  The
 /// input vector must have the same element type as NVT.
 static SDValue ExtendToType(SDValue InOp, MVT NVT, SelectionDAG &DAG,
@@ -31583,6 +31624,7 @@ static SDValue LowerCVTPS2PH(SDValue Op, SelectionDAG &DAG) {
 SDValue X86TargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default: llvm_unreachable("Should not custom lower this!");
+  case ISD::FSIN:               return LowerFSIN(Op, Subtarget, DAG);
   case ISD::ATOMIC_FENCE:       return LowerATOMIC_FENCE(Op, Subtarget, DAG);
   case ISD::ATOMIC_CMP_SWAP_WITH_SUCCESS:
     return LowerCMP_SWAP(Op, Subtarget, DAG);

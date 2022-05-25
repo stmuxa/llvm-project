@@ -1405,9 +1405,11 @@ LIBBUILTIN(scalbn, "ddi", "fne", "math.h", ALL_LANGUAGES)
 LIBBUILTIN(scalbnf, "ffi", "fne", "math.h", ALL_LANGUAGES)
 LIBBUILTIN(scalbnl, "LdLdi", "fne", "math.h", ALL_LANGUAGES)
 
-LIBBUILTIN(sin, "dd", "fne", "math.h", ALL_LANGUAGES)
-LIBBUILTIN(sinf, "ff", "fne", "math.h", ALL_LANGUAGES)
-LIBBUILTIN(sinl, "LdLd", "fne", "math.h", ALL_LANGUAGES)
+// Add const attribute to sine functions,
+// so the compiler is able to replace them with builtins
+LIBBUILTIN(sin, "dd", "fnec", "math.h", ALL_LANGUAGES)
+LIBBUILTIN(sinf, "ff", "fnec", "math.h", ALL_LANGUAGES)
+LIBBUILTIN(sinl, "LdLd", "fnec", "math.h", ALL_LANGUAGES)
 
 LIBBUILTIN(sinh, "dd", "fne", "math.h", ALL_LANGUAGES)
 LIBBUILTIN(sinhf, "ff", "fne", "math.h", ALL_LANGUAGES)
